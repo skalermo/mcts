@@ -1,4 +1,4 @@
-module github.com/go-mcts/mcts
+module github.com/skalermo/mcts
 
 go 1.17
 

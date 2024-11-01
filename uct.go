@@ -11,6 +11,12 @@ import (
 	"github.com/go-mcts/mcts/internal/log"
 )
 
+type Score struct {
+	Move	Move
+	Wins	float64
+	Visits	float64
+}
+
 func computeTree(rootState State, rd *rand.Rand, opts ...Option) *node {
 	options := newOptions(opts...)
 
@@ -64,8 +70,7 @@ func computeTree(rootState State, rd *rand.Rand, opts ...Option) *node {
 	return root
 }
 
-// ComputeMove start multi goroutines to compute best move
-func ComputeMove(rootState State, opts ...Option) Move {
+func ComputeMove(rootState State, opts ...Option) []Score {
 	options := newOptions(opts...)
 
 	if rootState.PlayerToMove() != 1 && rootState.PlayerToMove() != 2 {
@@ -78,10 +83,12 @@ func ComputeMove(rootState State, opts ...Option) Move {
 	}
 
 	if len(moves) == 1 {
-		return moves[0]
+		return []Score{Score{
+			Move: moves[0],
+			Wins: 0,
+			Visits: 0,
+		}}
 	}
-
-	startTime := time.Now()
 
 	rootFutures := make(chan *node, options.Goroutines)
 	for i := 0; i < options.Goroutines; i++ {
@@ -103,36 +110,19 @@ func ComputeMove(rootState State, opts ...Option) Move {
 		}
 	}
 
-	bestScore := float64(-1)
-	var bestMove Move
+	var scores []Score
 	visits.rng(func(key interface{}, v float64) {
 		move := key.(Move)
 		w := wins.get(move)
-		expectedSuccessRate := (w + 1) / (v + 2)
-		if expectedSuccessRate > bestScore {
-			bestMove = move
-			bestScore = expectedSuccessRate
+		score := Score{
+			Move: move,
+			Wins: w,
+			Visits: v,
 		}
+		scores = append(scores, score)
 
-		log.Debugf("Move: %v (%2d%% visits) (%2d%% wins)",
-			move, int(100.0*v/float64(gamePlayed)+0.5), int(100.0*w/v+0.5))
 	})
 
-	bestWins := wins.get(bestMove)
-	bestVisits := visits.get(bestMove)
-	log.Infof("Best: %v (%2d%% visits) (%2d%% wins)",
-		bestMove,
-		int(100.0*bestVisits/float64(gamePlayed)+0.5),
-		int(100.0*bestWins/bestVisits+0.5),
-	)
-
-	now := time.Now()
-	log.Infof(
-		"%d games played in %.2f s. (%.2f / second, %d parallel jobs).",
-		gamePlayed,
-		now.Sub(startTime).Seconds(),
-		float64(gamePlayed)/now.Sub(startTime).Seconds(),
-		options.Goroutines,
-	)
-	return bestMove
+	return scores
 }
+
